@@ -1,31 +1,3 @@
-<?php
-$decrypted = ''; // Variable pour stocker le message déchiffré
-$error = ''; // Variable pour stocker les erreurs
-
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    // Récupération des données soumises
-    $encrypted = $_POST["message"];
-    $iv = base64_decode($_POST["iv"]);  // Décodage de l'IV
-    $phrase_secrete = $_POST["phrase_secrete"];
-
-    // Validation des données
-    if (empty($encrypted) || empty($iv) || empty($phrase_secrete)) {
-        $error = "Tous les champs sont obligatoires.";
-    } else {
-        // Génération de la clé de chiffrement à partir de la phrase secrète
-        $key = substr(hash('sha256', $phrase_secrete, true), 0, 32);
-
-        // Déchiffrement avec AES-256-CBC
-        $decrypted = openssl_decrypt($encrypted, "aes-256-cbc", $key, 0, $iv);
-
-        // Vérification si le déchiffrement a échoué
-        if ($decrypted === false) {
-            $error = "Échec du déchiffrement. Vérifiez votre phrase secrète et vos données.";
-        }
-    }
-}
-?>
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -33,21 +5,24 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <title>Déchiffreur AES</title>
     <style>
         body {
-            font-family: Arial;
+            font-family: Arial, sans-serif;
             background: #111;
             color: #fff;
             display: flex;
             flex-direction: column;
             align-items: center;
-            margin-top: 50px;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
         }
         form {
             background: #222;
             padding: 20px;
             border-radius: 10px;
             width: 300px;
+            text-align: center;
         }
-        input, textarea {
+        input, button {
             width: 100%;
             padding: 10px;
             margin: 10px 0;
@@ -58,9 +33,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
         button {
             background: #28a745;
-            color: white;
-            border: none;
-            padding: 10px;
             font-weight: bold;
             cursor: pointer;
         }
@@ -77,28 +49,101 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <body>
 
 <h2>Déchiffrer un message AES</h2>
-<form method="post">
+<form id="decryptForm">
     <label>Message chiffré (base64) :</label>
-    <input type="text" name="message" required value="<?= $_POST['message'] ?? '' ?>">
+    <input type="text" id="encryptedMessage" required>
 
     <label>IV (base64) :</label>
-    <input type="text" name="iv" required value="<?= $_POST['iv'] ?? '' ?>">
+    <input type="text" id="iv" required>
 
     <label>Phrase secrète :</label>
-    <input type="text" name="phrase_secrete" required>
+    <input type="text" id="phraseSecrete" required>
 
     <button type="submit">Déchiffrer</button>
 </form>
 
-<?php if (!empty($error)): ?>
-    <div class="error">
-        <strong>Erreur :</strong> <?= htmlspecialchars($error) ?>
-    </div>
-<?php elseif (!empty($decrypted)): ?>
-    <div class="result">
-        <strong>Code déchiffré :</strong> <?= htmlspecialchars($decrypted) ?>
-    </div>
-<?php endif; ?>
+<div id="result" class="result" style="display: none;">
+    <strong>Code déchiffré :</strong> <span id="decryptedMessage"></span>
+</div>
+
+<div id="error" class="error" style="display: none;">
+    <strong>Erreur :</strong> <span id="errorMessage"></span>
+</div>
+
+<script>
+    document.getElementById('decryptForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        // Récupérer les valeurs du formulaire
+        const encryptedMessage = document.getElementById('encryptedMessage').value;
+        const iv = document.getElementById('iv').value;
+        const phraseSecrete = document.getElementById('phraseSecrete').value;
+
+        // Vérifier si tous les champs sont remplis
+        if (!encryptedMessage || !iv || !phraseSecrete) {
+            displayError('Tous les champs sont obligatoires.');
+            return;
+        }
+
+        // Décoder les valeurs en base64
+        const encryptedBytes = new Uint8Array(atob(encryptedMessage).split('').map(c => c.charCodeAt(0)));
+        const ivBytes = new Uint8Array(atob(iv).split('').map(c => c.charCodeAt(0)));
+
+        // Créer une clé à partir de la phrase secrète (SHA-256)
+        const encoder = new TextEncoder();
+        const keyMaterial = await window.crypto.subtle.importKey(
+            "raw", 
+            encoder.encode(phraseSecrete), 
+            { name: "PBKDF2" }, 
+            false, 
+            ["deriveKey"]
+        );
+
+        const key = await window.crypto.subtle.deriveKey(
+            {
+                name: "PBKDF2",
+                salt: new Uint8Array(0), // Pas de sel ici, tu peux ajouter si tu veux
+                iterations: 1000,
+                hash: "SHA-256"
+            },
+            keyMaterial,
+            { name: "AES-CBC", length: 256 },
+            false,
+            ["decrypt"]
+        );
+
+        // Déchiffrement AES-CBC
+        try {
+            const decryptedBytes = await window.crypto.subtle.decrypt(
+                {
+                    name: "AES-CBC",
+                    iv: ivBytes
+                },
+                key,
+                encryptedBytes
+            );
+
+            const decryptedText = new TextDecoder().decode(decryptedBytes);
+            displayResult(decryptedText);
+        } catch (e) {
+            displayError('Échec du déchiffrement. Vérifiez votre phrase secrète et vos données.');
+        }
+    });
+
+    // Fonction pour afficher les résultats
+    function displayResult(decryptedText) {
+        document.getElementById('decryptedMessage').textContent = decryptedText;
+        document.getElementById('result').style.display = 'block';
+        document.getElementById('error').style.display = 'none';
+    }
+
+    // Fonction pour afficher les erreurs
+    function displayError(message) {
+        document.getElementById('errorMessage').textContent = message;
+        document.getElementById('error').style.display = 'block';
+        document.getElementById('result').style.display = 'none';
+    }
+</script>
 
 </body>
 </html>
