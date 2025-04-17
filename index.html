@@ -1,0 +1,104 @@
+<?php
+$decrypted = ''; // Variable pour stocker le message déchiffré
+$error = ''; // Variable pour stocker les erreurs
+
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
+    // Récupération des données soumises
+    $encrypted = $_POST["message"];
+    $iv = base64_decode($_POST["iv"]);  // Décodage de l'IV
+    $phrase_secrete = $_POST["phrase_secrete"];
+
+    // Validation des données
+    if (empty($encrypted) || empty($iv) || empty($phrase_secrete)) {
+        $error = "Tous les champs sont obligatoires.";
+    } else {
+        // Génération de la clé de chiffrement à partir de la phrase secrète
+        $key = substr(hash('sha256', $phrase_secrete, true), 0, 32);
+
+        // Déchiffrement avec AES-256-CBC
+        $decrypted = openssl_decrypt($encrypted, "aes-256-cbc", $key, 0, $iv);
+
+        // Vérification si le déchiffrement a échoué
+        if ($decrypted === false) {
+            $error = "Échec du déchiffrement. Vérifiez votre phrase secrète et vos données.";
+        }
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Déchiffreur AES</title>
+    <style>
+        body {
+            font-family: Arial;
+            background: #111;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 50px;
+        }
+        form {
+            background: #222;
+            padding: 20px;
+            border-radius: 10px;
+            width: 300px;
+        }
+        input, textarea {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            background: #444;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+        }
+        button {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .result {
+            margin-top: 20px;
+            color: #0f0;
+        }
+        .error {
+            margin-top: 20px;
+            color: red;
+        }
+    </style>
+</head>
+<body>
+
+<h2>Déchiffrer un message AES</h2>
+<form method="post">
+    <label>Message chiffré (base64) :</label>
+    <input type="text" name="message" required value="<?= $_POST['message'] ?? '' ?>">
+
+    <label>IV (base64) :</label>
+    <input type="text" name="iv" required value="<?= $_POST['iv'] ?? '' ?>">
+
+    <label>Phrase secrète :</label>
+    <input type="text" name="phrase_secrete" required>
+
+    <button type="submit">Déchiffrer</button>
+</form>
+
+<?php if (!empty($error)): ?>
+    <div class="error">
+        <strong>Erreur :</strong> <?= htmlspecialchars($error) ?>
+    </div>
+<?php elseif (!empty($decrypted)): ?>
+    <div class="result">
+        <strong>Code déchiffré :</strong> <?= htmlspecialchars($decrypted) ?>
+    </div>
+<?php endif; ?>
+
+</body>
+</html>
